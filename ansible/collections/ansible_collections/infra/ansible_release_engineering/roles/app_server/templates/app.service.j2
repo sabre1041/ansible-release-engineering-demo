@@ -1,0 +1,17 @@
+{{ ansible_managed | comment }}
+
+[Unit]
+Description=Sample Application
+After=network.target
+
+[Service]
+Type=simple
+User={{ app_server_app_user }}
+Group={{ app_server_app_group }}
+WorkingDirectory={{ app_server_app_dir }}
+ExecStart=/usr/bin/java -jar {{ app_server_app_dir }}/{{ app_server_app_jar }}
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

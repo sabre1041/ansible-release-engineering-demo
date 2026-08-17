@@ -1,0 +1,21 @@
+---
+# Capture the currently deployed version for potential rollback.
+
+- name: Check if version file exists
+  ansible.builtin.stat:
+    path: "{{ app_release_version_file }}"
+  register: app_release_version_file_stat
+
+- name: Read current version from file
+  ansible.builtin.slurp:
+    src: "{{ app_release_version_file }}"
+  register: app_release_current_version_raw
+  when: app_release_version_file_stat.stat.exists
+
+- name: Set previous version fact
+  ansible.builtin.set_fact:
+    app_release_previous_version: >-
+      {{ (app_release_current_version_raw.content | b64decode | trim)
+         if app_release_version_file_stat.stat.exists
+         else '' }}
+...

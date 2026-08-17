@@ -1,0 +1,31 @@
+# Ansible CaC
+aap:
+  hosts:
+    aap-1:
+  vars: 
+    # Update with the values for your AAP instance
+    aap_hostname: aap.example.com
+    aap_username: admin
+    aap_password: mypassword
+
+lb:
+  hosts:
+    lb-1:
+      # Update with the values for lb-1
+      ansible_host: lb-1
+      ansible_user: rhel
+      ansible_port: 22
+
+app_servers:
+  hosts:
+    app-server-1:
+      # Update with the values for app-server-1
+      ansible_host: app-server-1
+      ansible_user: rhel
+      ansible_port: 22
+    app-server-2:
+      # Update with the values for app-server-2
+      ansible_host: app-server-2
+      ansible_user: rhel
+      ansible_port: 22
+...

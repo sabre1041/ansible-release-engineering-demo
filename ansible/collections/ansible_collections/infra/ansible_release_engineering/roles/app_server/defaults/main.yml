@@ -1,0 +1,18 @@
+---
+# defaults file for infra.ansible_release_engineering.app_server
+
+app_server_jre_package: "java-21-openjdk-headless"
+app_server_app_version: "1.0.0-SNAPSHOT"
+app_server_app_dir: "/opt/sample-webapp"
+app_server_app_jar: "simple-webapp.jar"
+app_server_app_port: 8080
+app_server_app_health_path: "/health"
+app_server_app_user: "app"
+app_server_app_group: "app"
+app_server_firewalld_enabled: true
+app_server_lb_port: 80
+app_server_artifact_base_url: >-
+  http://{{ hostvars[groups['lb'][0]]['ansible_host'] | default(groups['lb'][0]) }}:{{ app_server_lb_port }}/artifacts
+app_server_app_url: >-
+  {{ app_server_artifact_base_url }}/simple-webapp-{{ app_server_app_version }}-runner.jar
+...

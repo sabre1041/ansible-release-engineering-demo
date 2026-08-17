@@ -1,0 +1,38 @@
+---
+# defaults file for infra.ansible_release_engineering.app_release
+
+# Version to deploy (required - must be set by the caller)
+app_release_version: ""
+
+# Application directory
+app_release_app_dir: "/opt/sample-webapp"
+
+# Application jar filename
+app_release_app_jar: "simple-webapp.jar"
+
+# Application systemd service name
+app_release_app_service: "app"
+
+# Application port for health check
+app_release_app_port: 8080
+
+# Application health check path
+app_release_app_health_path: "/health"
+
+# Health check retries and delay (seconds)
+app_release_health_retries: 30
+app_release_health_delay: 5
+
+# Artifact base URL (defaults to the LB's artifact endpoint)
+app_release_artifact_base_url: "http://{{ hostvars[groups['lb'][0]]['ansible_host'] | default(groups['lb'][0]) }}:80/artifacts"
+
+# Full artifact URL (constructed from base URL and version)
+app_release_artifact_url: "{{ app_release_artifact_base_url }}/simple-webapp-{{ app_release_version }}-runner.jar"
+
+# Version tracking file
+app_release_version_file: "{{ app_release_app_dir }}/.app_version"
+
+# Application user and group
+app_release_app_user: "app"
+app_release_app_group: "app"
+...

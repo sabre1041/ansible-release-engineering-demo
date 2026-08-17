@@ -1,0 +1,19 @@
+---
+# Validate that the release artifact exists at the specified URL.
+# Required variable: app_release_version
+
+- name: Validate that app_release_version is provided
+  ansible.builtin.assert:
+    that:
+      - app_release_version | length > 0
+    fail_msg: "app_release_version must be set to a non-empty value"
+    success_msg: "Deploying version {{ app_release_version }}"
+
+- name: Check artifact URL is accessible
+  ansible.builtin.uri:
+    url: "{{ app_release_artifact_url }}"
+    method: HEAD
+    status_code: 200
+  register: app_release_artifact_check
+  failed_when: app_release_artifact_check.status != 200
+...

@@ -1,0 +1,148 @@
+---
+# Rolling application release with rollback capability.
+#
+# Usage:
+#   ansible-playbook -i ansible/inventory.yml ansible/playbooks/app_release.yml -e app_release_version=1.1.0-SNAPSHOT
+#
+
+# --- Play 1: Pre-flight checks ---
+- name: Pre-flight - validate artifact and capture current versions
+  hosts: app_servers
+  become: true
+  gather_facts: true
+  any_errors_fatal: true
+
+  tasks:
+    - name: Check release artifact exists # noqa: run-once[task]
+      ansible.builtin.include_role:
+        name: infra.ansible_release_engineering.app_release
+        tasks_from: check_artifact
+      run_once: true
+
+    - name: Capture current deployed version
+      ansible.builtin.include_role:
+        name: infra.ansible_release_engineering.app_release
+        tasks_from: capture_version
+
+    - name: Display version transition
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}:
+          {{ app_release_previous_version | default('unknown') }}
+          -> {{ app_release_version }}
+
+# --- Play 2: Rolling update ---
+- name: Rolling release - update app servers one at a time
+  hosts: app_servers
+  become: true
+  gather_facts: false
+  serial: 1
+
+  tasks:
+    - name: Rolling update with error handling
+      block:
+        - name: Disable backend in load balancer
+          ansible.builtin.include_role:
+            name: infra.ansible_release_engineering.lb
+            tasks_from: disable_backend
+            apply:
+              delegate_to: "{{ groups['lb'][0] }}"
+              delegate_facts: true
+          vars:
+            lb_backend_host: "{{ hostvars[inventory_hostname]['ansible_host'] | default(inventory_hostname) }}"
+
+        - name: Deploy new application version
+          ansible.builtin.include_role:
+            name: infra.ansible_release_engineering.app_release
+            tasks_from: deploy
+
+        - name: Re-enable backend in load balancer
+          ansible.builtin.include_role:
+            name: infra.ansible_release_engineering.lb
+            tasks_from: enable_backend
+            apply:
+              delegate_to: "{{ groups['lb'][0] }}"
+              delegate_facts: true
+          vars:
+            lb_backend_host: "{{ hostvars[inventory_hostname]['ansible_host'] | default(inventory_hostname) }}"
+
+      rescue:
+        - name: Report failure
+          ansible.builtin.debug:
+            msg: >-
+              RELEASE FAILED on {{ inventory_hostname }}.
+              Triggering rollback of all servers to version
+              {{ app_release_previous_version }}.
+
+        - name: Set rollback flag on all app servers
+          ansible.builtin.set_fact:
+            app_release_rollback_needed: true
+            app_release_rollback_version: "{{ app_release_previous_version }}"
+          delegate_to: "{{ item }}"
+          delegate_facts: true
+          loop: "{{ groups['app_servers'] }}"
+
+        - name: Re-enable backend in load balancer (best effort)
+          ansible.builtin.include_role:
+            name: infra.ansible_release_engineering.lb
+            tasks_from: enable_backend
+            apply:
+              delegate_to: "{{ groups['lb'][0] }}"
+              delegate_facts: true
+              ignore_errors: true  # noqa: ignore-errors
+          vars:
+            lb_backend_host: "{{ hostvars[inventory_hostname]['ansible_host'] | default(inventory_hostname) }}"
+
+        - name: Fail to stop serial processing
+          ansible.builtin.fail:
+            msg: "Rolling update failed on {{ inventory_hostname }}. Rollback will execute."
+
+# --- Play 3: Rollback (conditional) ---
+- name: Rollback all servers to previous version
+  hosts: app_servers
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Rollback to previous version
+      when: app_release_rollback_needed | default(false) | bool
+      block:
+        - name: Display rollback action
+          ansible.builtin.debug:
+            msg: >-
+              Rolling back {{ inventory_hostname }} to version
+              {{ app_release_rollback_version }}
+
+        - name: Disable backend in load balancer for rollback
+          ansible.builtin.include_role:
+            name: infra.ansible_release_engineering.lb
+            tasks_from: disable_backend
+            apply:
+              delegate_to: "{{ groups['lb'][0] }}"
+              delegate_facts: true
+          vars:
+            lb_backend_host: "{{ hostvars[inventory_hostname]['ansible_host'] | default(inventory_hostname) }}"
+
+        - name: Deploy previous version
+          ansible.builtin.include_role:
+            name: infra.ansible_release_engineering.app_release
+            tasks_from: deploy
+          vars:
+            app_release_version: "{{ app_release_rollback_version }}"
+
+        - name: Re-enable backend in load balancer after rollback
+          ansible.builtin.include_role:
+            name: infra.ansible_release_engineering.lb
+            tasks_from: enable_backend
+            apply:
+              delegate_to: "{{ groups['lb'][0] }}"
+              delegate_facts: true
+          vars:
+            lb_backend_host: "{{ hostvars[inventory_hostname]['ansible_host'] | default(inventory_hostname) }}"
+
+    - name: Fail playbook after rollback completes # noqa: run-once[task]
+      ansible.builtin.fail:
+        msg: "Rollback completed. The release of version {{ app_release_version }} failed."
+      when: app_release_rollback_needed | default(false) | bool
+      run_once: true
+...

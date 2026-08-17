@@ -1,0 +1,21 @@
+---
+# Re-enable a single backend in the nginx upstream by removing it from the disabled list.
+# Required variable: lb_backend_host - the address of the backend to re-enable.
+
+- name: Remove backend from disabled list
+  ansible.builtin.set_fact:
+    lb_disabled_backends: "{{ (lb_disabled_backends | default([])) | reject('equalto', lb_backend_host) | list }}"
+
+- name: Update nginx config with enabled backend
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/conf.d/ansible-release-engineering.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+
+- name: Reload nginx
+  ansible.builtin.service:
+    name: nginx
+    state: reloaded

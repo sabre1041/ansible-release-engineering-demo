@@ -1,0 +1,66 @@
+---
+# tasks file for infra.ansible_release_engineering.lb
+
+- name: Install required packages
+  ansible.builtin.package:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - nginx
+    - "{{ 'firewalld' if lb_firewalld_enabled | bool else omit }}"
+
+- name: Create artifacts directory
+  ansible.builtin.file:
+    path: "{{ lb_artifact_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Copy artifact files
+  ansible.builtin.copy:
+    src: "{{ item | trim }}"
+    dest: "{{ lb_artifact_dir }}/"
+    mode: "0644"
+  loop: "{{ lb_artifact_files.split(',') }}"
+  when: lb_artifact_files | length > 0
+
+- name: Allow nginx to connect to backend servers
+  ansible.posix.seboolean:
+    name: "{{ item }}"
+    state: true
+    persistent: true
+  loop:
+    - httpd_can_network_connect
+    - httpd_can_network_relay
+
+- name: Deploy nginx artifacts configuration
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/conf.d/ansible-release-engineering.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  notify: Reload nginx
+
+- name: Configure firewalld
+  when: lb_firewalld_enabled | bool
+  block:
+    - name: Ensure firewalld service is started and enabled
+      ansible.builtin.service:
+        name: firewalld
+        state: started
+        enabled: true
+
+    - name: Open firewalld port for nginx
+      ansible.posix.firewalld:
+        port: "{{ lb_nginx_port }}/tcp"
+        permanent: true
+        immediate: true
+        state: enabled
+
+- name: Ensure nginx service is started and enabled
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true
+...

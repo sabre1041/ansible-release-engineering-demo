@@ -1,0 +1,7 @@
+---
+# handlers file for infra.ansible_release_engineering.lb
+
+- name: Reload nginx
+  ansible.builtin.service:
+    name: nginx
+    state: reloaded

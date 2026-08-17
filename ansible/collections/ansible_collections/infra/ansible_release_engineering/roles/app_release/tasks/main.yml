@@ -1,0 +1,6 @@
+---
+# tasks file for infra.ansible_release_engineering.app_release
+
+- name: Deploy application release
+  ansible.builtin.include_tasks: deploy.yml
+...

@@ -1,0 +1,11 @@
+/.ansible
+/.claude
+ansible-navigator.log
+/.vscode
+/.github/
+ansible/collections/*
+!ansible/collections/ansible_collections/
+ansible/collections/ansible_collections/*
+!ansible/collections/ansible_collections/infra/
+ansible/collections/ansible_collections/infra/*
+!ansible/collections/ansible_collections/infra/ansible_release_engineering/

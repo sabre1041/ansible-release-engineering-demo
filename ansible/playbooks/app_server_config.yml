@@ -1,0 +1,16 @@
+---
+# App server configuration playbook.
+#
+# Usage:
+#   ansible-playbook -i ansible/inventory.yml ansible/playbooks/app_server_config.yml
+
+- name: Configure app servers
+  hosts: app_servers
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Include app_server role
+      ansible.builtin.include_role:
+        name: infra.ansible_release_engineering.app_server
+...

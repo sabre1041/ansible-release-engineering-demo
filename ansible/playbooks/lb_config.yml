@@ -1,0 +1,17 @@
+---
+# Load balancer configuration playbook. Upload artifacts to serve via nginx and configure firewall rules for access.
+#
+# Usage:
+#   ansible-playbook -i ansible/inventory.yml ansible/playbooks/lb_config.yml -e lb_artifact_files="<path_to_artifact1>,<path_to_artifact2>"
+
+
+- name: Configure load balancer
+  hosts: lb
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Include lb role
+      ansible.builtin.include_role:
+        name: infra.ansible_release_engineering.lb
+...

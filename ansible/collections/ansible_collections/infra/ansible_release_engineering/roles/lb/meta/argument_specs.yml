@@ -1,0 +1,9 @@
+---
+argument_specs:
+  main:
+    short_description: Install nginx and deploy artifact files.
+    options:
+      lb_artifact_files:
+        type: str
+        description: Comma-separated list of local file paths to copy to the nginx artifacts directory.
+        default: ""

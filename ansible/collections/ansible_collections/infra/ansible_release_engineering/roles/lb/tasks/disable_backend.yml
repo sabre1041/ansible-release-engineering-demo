@@ -1,0 +1,21 @@
+---
+# Disable a single backend in the nginx upstream by marking it as 'down'.
+# Required variable: lb_backend_host - the address of the backend to disable.
+
+- name: Add backend to disabled list
+  ansible.builtin.set_fact:
+    lb_disabled_backends: "{{ (lb_disabled_backends | default([])) + [lb_backend_host] }}"
+
+- name: Update nginx config with disabled backend
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/conf.d/ansible-release-engineering.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+
+- name: Reload nginx
+  ansible.builtin.service:
+    name: nginx
+    state: reloaded

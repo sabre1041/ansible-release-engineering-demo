@@ -1,0 +1,26 @@
+{{ ansible_managed | comment }}
+
+upstream backend {
+{% for host in groups['app_servers'] %}
+{% set addr = hostvars[host]['ansible_host'] | default(host) %}
+    server {{ addr }}:{{ lb_backend_port }}{{ ' down' if addr in (lb_disabled_backends | default([])) else '' }};
+{% endfor %}
+}
+
+server {
+    listen {{ lb_nginx_port }} default_server;
+    server_name _;
+
+    location / {
+        proxy_pass http://backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /artifacts {
+        alias {{ lb_artifact_dir }};
+        autoindex on;
+    }
+}

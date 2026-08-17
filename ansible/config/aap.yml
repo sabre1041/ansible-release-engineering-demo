@@ -1,0 +1,80 @@
+
+---
+aap_organizations:
+  - name: Ansible Release Engineering Demo
+    description: Ansible Release Engineering Demo
+
+controller_credentials:
+  - name: SSH
+    credential_type: Machine
+    organization: Ansible Release Engineering Demo
+    inputs:
+      username: rhel
+      #password: password
+      ssh_key_data: "{{ lookup('file', cac_ssh_private_key_file | default(''), errors='ignore') | default(omit) }}" # Hardcode the path to your private key or pass it as an extra variable when running the playbook.
+
+controller_inventories:
+  - name: Ansible Release Engineering Demo
+    organization: Ansible Release Engineering Demo
+
+controller_hosts:
+  - name: lb-1
+    inventory: Ansible Release Engineering Demo
+    enabled: true
+    variables:
+      ansible_host: "" # Update with the actual IP address or hostname of lb-1
+  - name: app-server-1
+    inventory: Ansible Release Engineering Demo
+    enabled: true
+    variables:
+      ansible_host: "" # Update with the actual IP address or hostname of app-server-1
+  - name: app-server-2
+    inventory: Ansible Release Engineering Demo
+    enabled: true
+    variables:
+      ansible_host: "" # Update with the actual IP address or hostname of app-server-2
+
+controller_groups:
+  - name: lb
+    inventory: "Ansible Release Engineering Demo"
+    state: present
+    hosts:
+      - lb-1
+  - name: app_servers
+    inventory: "Ansible Release Engineering Demo"
+    state: present
+    hosts:
+      - app-server-1
+      - app-server-2
+
+controller_projects:
+  - name: "Ansible Release Engineering Demo"
+    scm_type: git
+    scm_url: https://github.com/sabre1041/ansible-release-engineering-demo
+    scm_branch: "main"
+    scm_clean: true
+    description: Ansible Release Engineering Demo
+    organization: Ansible Release Engineering Demo
+    update_project: true
+
+controller_templates:
+  - name: Release Application
+    description: Perform a release of the application to the app servers.
+    organization: Ansible Release Engineering Demo
+    project: Ansible Release Engineering Demo
+    inventory: Ansible Release Engineering Demo
+    job_type: run
+    playbook: ansible/playbooks/app_release.yml
+    survey_enabled: true
+    survey:
+      name: Application Release Survey
+      description: Perform a release of the application to the app servers.
+      spec:
+        - question_name: 'Enter the Application Release Version'
+          type: text
+          variable: app_release_version
+          required: true
+    credentials:
+      - SSH
+
+...

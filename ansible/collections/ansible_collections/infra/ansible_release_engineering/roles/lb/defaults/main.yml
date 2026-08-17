@@ -1,0 +1,9 @@
+---
+# defaults file for infra.ansible_release_engineering.lb
+
+lb_artifact_dir: "/usr/share/nginx/html/artifacts"
+lb_artifact_files: ""
+lb_nginx_port: 80
+lb_backend_port: 8080
+lb_firewalld_enabled: true
+lb_disabled_backends: []
