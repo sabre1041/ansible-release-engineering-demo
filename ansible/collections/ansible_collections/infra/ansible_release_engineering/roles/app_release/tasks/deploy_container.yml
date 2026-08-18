@@ -1,0 +1,65 @@
+---
+# Container mode release deployment
+
+- name: Stop container service
+  ansible.builtin.systemd_service:
+    name: "{{ app_release_app_service }}"
+    state: stopped
+
+- name: Log in to container registry
+  containers.podman.podman_login:
+    registry: "{{ app_release_container_image | regex_replace('/.*$', '') }}"
+    username: "{{ app_release_container_registry_username }}"
+    password: "{{ app_release_container_registry_password }}"
+  no_log: true
+  when:
+    - app_release_container_registry_username | length > 0
+    - app_release_container_registry_password | length > 0
+
+- name: Pull new container image version
+  ansible.builtin.command:
+    cmd: "podman pull {{ app_release_container_image }}:{{ app_release_container_image_tag }}"
+  register: app_release_pull_result
+  changed_when: "'Copying' in app_release_pull_result.stdout"
+
+- name: Update container systemd unit
+  ansible.builtin.template:
+    src: app-container.service.j2
+    dest: "/etc/systemd/system/{{ app_release_app_service }}.service"
+    owner: root
+    group: root
+    mode: "0644"
+  vars:
+    app_server_container_image: "{{ app_release_container_image }}"
+    app_server_container_image_tag: "{{ app_release_container_image_tag }}"
+    app_server_container_name: "{{ app_release_container_name }}"
+    app_server_app_port: "{{ app_release_app_port }}"
+  register: app_release_container_unit
+  notify: Reload systemd
+
+- name: Flush handlers to reload systemd before starting service
+  ansible.builtin.meta: flush_handlers
+  when: app_release_container_unit is changed
+
+- name: Write version file
+  ansible.builtin.copy:
+    content: "{{ app_release_version }}"
+    dest: "{{ app_release_version_file }}"
+    owner: "{{ app_release_app_user }}"
+    group: "{{ app_release_app_group }}"
+    mode: "0644"
+
+- name: Start container service
+  ansible.builtin.systemd_service:
+    name: "{{ app_release_app_service }}"
+    state: started
+
+- name: Wait for application health endpoint
+  ansible.builtin.uri:
+    url: "http://localhost:{{ app_release_app_port }}{{ app_release_app_health_path }}"
+    status_code: 200
+  register: app_release_health_check
+  until: app_release_health_check.status == 200
+  retries: "{{ app_release_health_retries }}"
+  delay: "{{ app_release_health_delay }}"
+...

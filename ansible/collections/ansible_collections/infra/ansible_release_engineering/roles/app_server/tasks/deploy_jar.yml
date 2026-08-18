@@ -1,0 +1,71 @@
+---
+# JAR deployment mode tasks
+
+- name: Install JRE package
+  ansible.builtin.package:
+    name: "{{ app_server_jre_package }}"
+    state: present
+
+- name: Create application group
+  ansible.builtin.group:
+    name: "{{ app_server_app_group }}"
+    system: true
+    state: present
+
+- name: Create application user
+  ansible.builtin.user:
+    name: "{{ app_server_app_user }}"
+    group: "{{ app_server_app_group }}"
+    home: "{{ app_server_app_dir }}"
+    shell: /sbin/nologin
+    system: true
+    create_home: false
+    state: present
+
+- name: Create application directory
+  ansible.builtin.file:
+    path: "{{ app_server_app_dir }}"
+    state: directory
+    owner: "{{ app_server_app_user }}"
+    group: "{{ app_server_app_group }}"
+    mode: "0755"
+
+- name: Download application jar
+  ansible.builtin.get_url:
+    url: "{{ app_server_app_url }}"
+    dest: "{{ app_server_app_dir }}/{{ app_server_app_jar }}"
+    owner: "{{ app_server_app_user }}"
+    group: "{{ app_server_app_group }}"
+    mode: "0644"
+  notify: Restart app
+
+- name: Write application version file
+  ansible.builtin.copy:
+    content: "{{ app_server_app_version }}"
+    dest: "{{ app_server_app_dir }}/.app_version"
+    owner: "{{ app_server_app_user }}"
+    group: "{{ app_server_app_group }}"
+    mode: "0644"
+
+- name: Deploy systemd unit file
+  ansible.builtin.template:
+    src: app.service.j2
+    dest: /etc/systemd/system/app.service
+    owner: root
+    group: root
+    mode: "0644"
+  register: app_server_unit_file
+  notify:
+    - Reload systemd
+    - Restart app
+
+- name: Flush handlers to reload systemd before starting service
+  ansible.builtin.meta: flush_handlers
+  when: app_server_unit_file is changed
+
+- name: Enable and start app service
+  ansible.builtin.systemd_service:
+    name: app
+    state: started
+    enabled: true
+...

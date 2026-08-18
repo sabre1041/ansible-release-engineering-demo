@@ -1,0 +1,21 @@
+{{ ansible_managed | comment }}
+
+[Unit]
+Description=Sample Application (Container)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Restart=on-failure
+RestartSec=10
+ExecStartPre=-/usr/bin/podman rm -f {{ app_server_container_name }}
+ExecStart=/usr/bin/podman run \
+  --name {{ app_server_container_name }} \
+  --rm \
+  --publish {{ app_server_app_port }}:8080 \
+  {{ app_server_container_image }}:{{ app_server_container_image_tag }}
+ExecStop=/usr/bin/podman stop {{ app_server_container_name }}
+
+[Install]
+WantedBy=multi-user.target

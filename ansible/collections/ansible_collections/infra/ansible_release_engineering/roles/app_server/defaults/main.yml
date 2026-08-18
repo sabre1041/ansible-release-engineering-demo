@@ -1,18 +1,32 @@
 ---
 # defaults file for infra.ansible_release_engineering.app_server
 
-app_server_jre_package: "java-21-openjdk-headless"
+# Deployment mode: "jar" or "container"
+app_server_deployment_mode: "container"
+
 app_server_app_version: "1.0.0-SNAPSHOT"
-app_server_app_dir: "/opt/sample-webapp"
-app_server_app_jar: "simple-webapp.jar"
 app_server_app_port: 8080
 app_server_app_health_path: "/health"
 app_server_app_user: "app"
 app_server_app_group: "app"
+app_server_app_dir: "/opt/sample-webapp"
 app_server_firewalld_enabled: true
+
+# JAR mode settings
+app_server_jre_package: "java-21-openjdk-headless"
+app_server_app_jar: "simple-webapp.jar"
 app_server_lb_port: 80
 app_server_artifact_base_url: >-
   http://{{ hostvars[groups['lb'][0]]['ansible_host'] | default(groups['lb'][0]) }}:{{ app_server_lb_port }}/artifacts
 app_server_app_url: >-
   {{ app_server_artifact_base_url }}/simple-webapp-{{ app_server_app_version }}-runner.jar
+
+# Container mode settings
+app_server_container_image: "quay.io/ablock/ansible-release-engineering-demo"
+app_server_container_image_tag: "{{ app_server_app_version }}"
+app_server_container_name: "app"
+
+# Container registry authentication (leave empty to skip login)
+app_server_container_registry_username: ""
+app_server_container_registry_password: ""
 ...

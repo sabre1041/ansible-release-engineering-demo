@@ -2,9 +2,18 @@
 
 Demonstrates a rolling deployment workflow with automatic rollback using Ansible. A Quarkus Java application is deployed across multiple app servers behind an nginx load balancer, one server at a time. If any server fails during the release, all servers are automatically rolled back to the previous version.
 
+Two deployment modes are supported:
+
+- **JAR mode** (default) — Application JARs are hosted on the load balancer and downloaded by each app server. App servers run the JAR directly with Java 21.
+- **Container mode** — Application container images are pulled from a registry and run with Podman on each app server. No Java installation or artifact hosting is required on the managed hosts.
+
+The deployment mode is controlled by the `app_server_deployment_mode` and `app_release_deployment_mode` variables (set to `jar` or `container`).
+
 The project also includes Configuration-as-Code (CaC) for provisioning an Ansible Automation Platform (AAP) controller with the organizations, credentials, inventories, projects, and job templates needed to run the workflow.
 
 ## Architecture
+
+### JAR Mode
 
 ```mermaid
 graph TB
@@ -27,6 +36,29 @@ graph TB
     APP2 -. "download JAR" .-> ARTIFACTS
 ```
 
+### Container Mode
+
+```mermaid
+graph TB
+    AAP["AAP Controller"]
+    REG["Container Registry<br/>(e.g. Quay)"]
+
+    subgraph Load Balancer
+        NGINX["nginx<br/>(reverse proxy)"]
+    end
+
+    subgraph App Servers
+        APP1["app-server-1<br/>(Podman)"]
+        APP2["app-server-2<br/>(Podman)"]
+    end
+
+    AAP -->|"triggers release playbook"| NGINX
+    NGINX -->|"proxy traffic"| APP1
+    NGINX -->|"proxy traffic"| APP2
+    APP1 -. "pull image" .-> REG
+    APP2 -. "pull image" .-> REG
+```
+
 ### Rolling Release Flow
 
 ```mermaid
@@ -45,9 +77,9 @@ flowchart LR
 
 | Component | Path | Description |
 |-----------|------|-------------|
-| Sample Application | `app/simple-webapp/` | Quarkus (Red Hat Build) REST application built as an uber-jar with Maven and Java 21. Exposes a version endpoint at `/` and a health endpoint at `/health`. |
+| Sample Application | `app/simple-webapp/` | Quarkus (Red Hat Build) REST application built as an uber-jar with Maven and Java 21. Exposes a version endpoint at `/` and a health endpoint at `/health`. Includes a `Containerfile` for building a container image. |
 | Ansible Playbooks | `ansible/playbooks/` | Four playbooks covering AAP configuration, app server setup, load balancer setup, and the rolling release workflow. |
-| Custom Collection | `ansible/collections/.../infra/ansible_release_engineering/` | Three roles (`app_release`, `app_server`, `lb`) that encapsulate deployment, server provisioning, and load balancer management. |
+| Custom Collection | `ansible/collections/.../infra/ansible_release_engineering/` | Three roles (`app_release`, `app_server`, `lb`) that encapsulate deployment, server provisioning, and load balancer management. Each role supports both JAR and container deployment modes. |
 | AAP CaC Config | `ansible/config/aap.yml` | Declarative AAP controller state: organization, credentials, inventory, project, and job template. |
 | Inventory | `ansible/inventory.yml` | Three host groups: `aap` (controller), `lb` (1 load balancer), and `app_servers` (2 app servers). |
 
@@ -64,9 +96,9 @@ flowchart LR
 
 | Role | Purpose |
 |------|---------|
-| `app_release` | Validates artifact availability, captures the current deployed version for rollback, and handles the deploy-restart-healthcheck cycle. |
-| `app_server` | Provisions app servers with Java 21, a dedicated app user, systemd service, and firewall rules. |
-| `lb` | Installs and configures nginx as a reverse proxy, manages the upstream server list, and serves build artifacts from `/artifacts`. |
+| `app_release` | Validates artifact availability, captures the current deployed version for rollback, and handles the deploy-restart-healthcheck cycle. Delegates to `deploy_jar.yml` or `deploy_container.yml` based on deployment mode. |
+| `app_server` | Provisions app servers with a dedicated app user, systemd service, and firewall rules. In JAR mode, installs Java 21 and downloads the application JAR. In container mode, installs Podman and pulls the application container image. |
+| `lb` | Installs and configures nginx as a reverse proxy and manages the upstream server list. In JAR mode, also serves build artifacts from `/artifacts` (controlled by `lb_artifacts_enabled`). |
 
 ## Setup
 
@@ -74,11 +106,13 @@ The following steps walk through setting up the demo in your own environment. Yo
 
 ### Prerequisites
 
-- Java 21 and Maven installed on the build machine
+- Java 21 and Maven installed on the build machine (JAR mode), or Podman/Docker (container mode)
 - Ansible installed with the required collections (`ansible-galaxy collection install -r ansible/requirements.yml`)
 - SSH key-based access to all target hosts
 
 ### 1. Build the Application
+
+#### JAR Mode
 
 Build the Quarkus application and produce JARs for two versions so the release workflow can be demonstrated.
 
@@ -102,6 +136,27 @@ cp target/simple-webapp-1.0.1-SNAPSHOT-runner.jar /tmp/artifacts/
 popd
 ```
 
+#### Container Mode
+
+Build and push container images for two versions to a container registry.
+
+```bash
+pushd app/simple-webapp
+
+# Build and push version 1.0.0-SNAPSHOT
+podman build -t quay.io/<your-org>/ansible-release-engineering-demo:1.0.0-SNAPSHOT .
+podman push quay.io/<your-org>/ansible-release-engineering-demo:1.0.0-SNAPSHOT
+
+# Update the version to 1.0.1-SNAPSHOT
+sed -i 's/1.0.0-SNAPSHOT/1.0.1-SNAPSHOT/' pom.xml
+
+# Build and push version 1.0.1-SNAPSHOT
+podman build -t quay.io/<your-org>/ansible-release-engineering-demo:1.0.1-SNAPSHOT .
+podman push quay.io/<your-org>/ansible-release-engineering-demo:1.0.1-SNAPSHOT
+
+popd
+```
+
 ### 2. Update the Inventory
 
 Edit `ansible/inventory.yml` and replace the placeholder values with the details of your environment:
@@ -112,21 +167,32 @@ Edit `ansible/inventory.yml` and replace the placeholder values with the details
 
 ### 3. Configure the Load Balancer
 
-Run the `lb_config.yml` playbook, passing the path to the directory containing the JARs built in step 1:
+Run the `lb_config.yml` playbook. In JAR mode, pass the artifact files built in step 1:
 
 ```bash
+# JAR mode
 ansible-playbook -i ansible/inventory.yml ansible/playbooks/lb_config.yml \
   -e lb_artifact_files="simple-webapp-1.0.0-SNAPSHOT-runner.jar,simple-webapp-1.0.1-SNAPSHOT-runner.jar"
+
+# Container mode (no artifacts needed)
+ansible-playbook -i ansible/inventory.yml ansible/playbooks/lb_config.yml \
+  -e lb_artifacts_enabled=false
 ```
 
-This installs nginx, configures it as a reverse proxy to the app servers, and uploads the application JARs to the `/artifacts` directory on the load balancer.
+This installs nginx and configures it as a reverse proxy to the app servers. In JAR mode, it also uploads the application JARs to the `/artifacts` directory on the load balancer.
 
 ### 4. Configure the App Servers
 
-Run the `app_server_config.yml` playbook to provision the app servers with Java, a dedicated app user, the initial application JAR, and a systemd service:
+Run the `app_server_config.yml` playbook to provision the app servers:
 
 ```bash
+# JAR mode (default) — installs Java, downloads the JAR, configures a systemd service
 ansible-playbook -i ansible/inventory.yml ansible/playbooks/app_server_config.yml
+
+# Container mode — installs Podman, pulls the container image, configures a systemd service
+ansible-playbook -i ansible/inventory.yml ansible/playbooks/app_server_config.yml \
+  -e app_server_deployment_mode=container \
+  -e app_server_container_image=quay.io/<your-org>/ansible-release-engineering-demo
 ```
 
 ### 5. Configure AAP (Configuration-as-Code)
@@ -158,5 +224,7 @@ A new release of the application can be triggered using your AAP instance now th
 Navigate to the AAP instance in a browser and select **Automation Execution** -> **Templates**. Select **Release Application** and the click **Launch Template**.
 
 Enter the version of the application that you would like to update to: `1.0.1-SNAPSHOT` (simulates `1.0.0-SNAPSHOT` -> `1.0.1-SNAPSHOT`). Click **Next** and then **Finish** to start the release process.
+
+When using container mode, also pass `app_release_deployment_mode=container` (and optionally `app_release_container_image`) as extra variables when launching the template.
 
 Once the automation completes successfully, navigate back to the hostname of the Load Balancer instance in a browser and confirm the application has been updated to the specified version.

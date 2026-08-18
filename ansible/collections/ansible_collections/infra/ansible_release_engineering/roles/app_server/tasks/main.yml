@@ -1,75 +1,25 @@
 ---
 # tasks file for infra.ansible_release_engineering.app_server
 
-- name: Install Packages
-  ansible.builtin.package:
-    name: "{{ item }}"
-    state: present
-  loop:
-    - "{{ app_server_jre_package }}"
-    - "{{ 'firewalld' if app_server_firewalld_enabled | bool else omit }}"
+- name: Validate deployment mode
+  ansible.builtin.assert:
+    that:
+      - app_server_deployment_mode in ['jar', 'container']
+    fail_msg: >-
+      app_server_deployment_mode must be 'jar' or 'container',
+      got '{{ app_server_deployment_mode }}'
 
-- name: Create application group
-  ansible.builtin.group:
-    name: "{{ app_server_app_group }}"
-    system: true
-    state: present
-
-- name: Create application user
-  ansible.builtin.user:
-    name: "{{ app_server_app_user }}"
-    group: "{{ app_server_app_group }}"
-    home: "{{ app_server_app_dir }}"
-    shell: /sbin/nologin
-    system: true
-    create_home: false
-    state: present
-
-- name: Create application directory
-  ansible.builtin.file:
-    path: "{{ app_server_app_dir }}"
-    state: directory
-    owner: "{{ app_server_app_user }}"
-    group: "{{ app_server_app_group }}"
-    mode: "0755"
-
-- name: Download application jar
-  ansible.builtin.get_url:
-    url: "{{ app_server_app_url }}"
-    dest: "{{ app_server_app_dir }}/{{ app_server_app_jar }}"
-    owner: "{{ app_server_app_user }}"
-    group: "{{ app_server_app_group }}"
-    mode: "0644"
-  notify: Restart app
-
-- name: Write application version file
-  ansible.builtin.copy:
-    content: "{{ app_server_app_version }}"
-    dest: "{{ app_server_app_dir }}/.app_version"
-    owner: "{{ app_server_app_user }}"
-    group: "{{ app_server_app_group }}"
-    mode: "0644"
-
-- name: Deploy systemd unit file
-  ansible.builtin.template:
-    src: app.service.j2
-    dest: /etc/systemd/system/app.service
-    owner: root
-    group: root
-    mode: "0644"
-  notify:
-    - Reload systemd
-    - Restart app
-
-- name: Enable and start app service
-  ansible.builtin.systemd_service:
-    name: app
-    state: started
-    enabled: true
+- name: Include tasks for {{ app_server_deployment_mode }} deployment mode # noqa: name[template]
+  ansible.builtin.include_tasks: "deploy_{{ app_server_deployment_mode }}.yml"
 
 - name: Configure firewalld
   when: app_server_firewalld_enabled | bool
   block:
+    - name: Install firewalld
+      ansible.builtin.package:
+        name: firewalld
+        state: present
+
     - name: Ensure firewalld service is started and enabled
       ansible.builtin.service:
         name: firewalld

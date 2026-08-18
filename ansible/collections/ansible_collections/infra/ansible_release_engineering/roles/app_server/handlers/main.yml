@@ -1,11 +1,18 @@
 ---
 # handlers file for infra.ansible_release_engineering.app_server
 
+# JAR mode handlers
 - name: Reload systemd
   ansible.builtin.systemd_service:
     daemon_reload: true
 
 - name: Restart app
+  ansible.builtin.systemd_service:
+    name: app
+    state: restarted
+
+# Container mode handlers
+- name: Restart app container
   ansible.builtin.systemd_service:
     name: app
     state: restarted

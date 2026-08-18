@@ -2,39 +2,6 @@
 # Deploy a new application version on the current host.
 # Required variable: app_release_version
 
-- name: Stop application service
-  ansible.builtin.systemd_service:
-    name: "{{ app_release_app_service }}"
-    state: stopped
-
-- name: Download new application jar
-  ansible.builtin.get_url:
-    url: "{{ app_release_artifact_url }}"
-    dest: "{{ app_release_app_dir }}/{{ app_release_app_jar }}"
-    owner: "{{ app_release_app_user }}"
-    group: "{{ app_release_app_group }}"
-    mode: "0644"
-    force: true
-
-- name: Write version file
-  ansible.builtin.copy:
-    content: "{{ app_release_version }}"
-    dest: "{{ app_release_version_file }}"
-    owner: "{{ app_release_app_user }}"
-    group: "{{ app_release_app_group }}"
-    mode: "0644"
-
-- name: Start application service
-  ansible.builtin.systemd_service:
-    name: "{{ app_release_app_service }}"
-    state: started
-
-- name: Wait for application health endpoint
-  ansible.builtin.uri:
-    url: "http://localhost:{{ app_release_app_port }}{{ app_release_app_health_path }}"
-    status_code: 200
-  register: app_release_health_check
-  until: app_release_health_check.status == 200
-  retries: "{{ app_release_health_retries }}"
-  delay: "{{ app_release_health_delay }}"
+- name: Deploy application release ({{ app_release_deployment_mode }} mode)
+  ansible.builtin.include_tasks: "deploy_{{ app_release_deployment_mode }}.yml"
 ...

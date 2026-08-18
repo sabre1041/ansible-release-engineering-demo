@@ -1,14 +1,11 @@
 ---
 # defaults file for infra.ansible_release_engineering.app_release
 
+# Deployment mode: "jar" or "container"
+app_release_deployment_mode: "container"
+
 # Version to deploy (required - must be set by the caller)
 app_release_version: ""
-
-# Application directory
-app_release_app_dir: "/opt/sample-webapp"
-
-# Application jar filename
-app_release_app_jar: "simple-webapp.jar"
 
 # Application systemd service name
 app_release_app_service: "app"
@@ -23,11 +20,8 @@ app_release_app_health_path: "/health"
 app_release_health_retries: 30
 app_release_health_delay: 5
 
-# Artifact base URL (defaults to the LB's artifact endpoint)
-app_release_artifact_base_url: "http://{{ hostvars[groups['lb'][0]]['ansible_host'] | default(groups['lb'][0]) }}:80/artifacts"
-
-# Full artifact URL (constructed from base URL and version)
-app_release_artifact_url: "{{ app_release_artifact_base_url }}/simple-webapp-{{ app_release_version }}-runner.jar"
+# Application directory
+app_release_app_dir: "/opt/sample-webapp"
 
 # Version tracking file
 app_release_version_file: "{{ app_release_app_dir }}/.app_version"
@@ -35,4 +29,20 @@ app_release_version_file: "{{ app_release_app_dir }}/.app_version"
 # Application user and group
 app_release_app_user: "app"
 app_release_app_group: "app"
+
+# JAR mode settings
+app_release_app_jar: "simple-webapp.jar"
+app_release_artifact_base_url: >-
+  http://{{ hostvars[groups['lb'][0]]['ansible_host'] | default(groups['lb'][0]) }}:80/artifacts
+app_release_artifact_url: >-
+  {{ app_release_artifact_base_url }}/simple-webapp-{{ app_release_version }}-runner.jar
+
+# Container mode settings
+app_release_container_image: "quay.io/ablock/ansible-release-engineering-demo"
+app_release_container_image_tag: "{{ app_release_version }}"
+app_release_container_name: "app"
+
+# Container registry authentication (leave empty to skip login)
+app_release_container_registry_username: ""
+app_release_container_registry_password: ""
 ...

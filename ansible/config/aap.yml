@@ -3,6 +3,8 @@
 aap_organizations:
   - name: Ansible Release Engineering Demo
     description: Ansible Release Engineering Demo
+    galaxy_credentials:
+      - "Ansible Galaxy"
 
 controller_credentials:
   - name: SSH
@@ -65,6 +67,11 @@ controller_templates:
     inventory: Ansible Release Engineering Demo
     job_type: run
     playbook: ansible/playbooks/app_release.yml
+    extra_vars:
+      # Update with the desired deployment mode ('jar' or 'container')
+      app_release_deployment_mode: container
+      # Uncomment with the location of the image to deploy if using container deployment mode
+      # app_release_container_image: "quay.io/ablock/ansible-release-engineering-demo"
     survey_enabled: true
     survey:
       name: Application Release Survey

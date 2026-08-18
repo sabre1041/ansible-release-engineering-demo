@@ -1,6 +1,10 @@
 ---
 # handlers file for infra.ansible_release_engineering.app_release
 
+- name: Reload systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
 - name: Restart app service
   ansible.builtin.systemd_service:
     name: "{{ app_release_app_service }}"

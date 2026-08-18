@@ -1,0 +1,78 @@
+---
+# Container deployment mode tasks
+
+- name: Install podman
+  ansible.builtin.package:
+    name: podman
+    state: present
+
+- name: Create application group
+  ansible.builtin.group:
+    name: "{{ app_server_app_group }}"
+    system: true
+    state: present
+
+- name: Create application user
+  ansible.builtin.user:
+    name: "{{ app_server_app_user }}"
+    group: "{{ app_server_app_group }}"
+    home: "/home/{{ app_server_app_user }}"
+    shell: /bin/bash
+    system: true
+    create_home: true
+    state: present
+
+- name: Create application data directory
+  ansible.builtin.file:
+    path: "{{ app_server_app_dir }}"
+    state: directory
+    owner: "{{ app_server_app_user }}"
+    group: "{{ app_server_app_group }}"
+    mode: "0755"
+
+- name: Log in to container registry
+  containers.podman.podman_login:
+    registry: "{{ app_server_container_image | regex_replace('/.*$', '') }}"
+    username: "{{ app_server_container_registry_username }}"
+    password: "{{ app_server_container_registry_password }}"
+  no_log: true
+  when:
+    - app_server_container_registry_username | length > 0
+    - app_server_container_registry_password | length > 0
+
+- name: Pull container image
+  ansible.builtin.command:
+    cmd: "podman pull {{ app_server_container_image }}:{{ app_server_container_image_tag }}"
+  register: app_server_pull_result
+  changed_when: "'Copying' in app_server_pull_result.stdout"
+
+- name: Deploy container systemd unit
+  ansible.builtin.template:
+    src: app-container.service.j2
+    dest: "/etc/systemd/system/app.service"
+    owner: root
+    group: root
+    mode: "0644"
+  register: app_server_container_unit_file
+  notify:
+    - Reload systemd
+    - Restart app container
+
+- name: Write application version file
+  ansible.builtin.copy:
+    content: "{{ app_server_app_version }}"
+    dest: "{{ app_server_app_dir }}/.app_version"
+    owner: "{{ app_server_app_user }}"
+    group: "{{ app_server_app_group }}"
+    mode: "0644"
+
+- name: Flush handlers to reload systemd before starting service
+  ansible.builtin.meta: flush_handlers
+  when: app_server_container_unit_file is changed
+
+- name: Enable and start container service
+  ansible.builtin.systemd_service:
+    name: app
+    state: started
+    enabled: true
+...

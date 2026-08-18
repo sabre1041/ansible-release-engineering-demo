@@ -10,10 +10,39 @@
     success_msg: "Deploying version {{ app_release_version }}"
 
 - name: Check artifact URL is accessible
+  when: app_release_deployment_mode == 'jar'
   ansible.builtin.uri:
     url: "{{ app_release_artifact_url }}"
     method: HEAD
     status_code: 200
   register: app_release_artifact_check
   failed_when: app_release_artifact_check.status != 200
+
+- name: Check container artifact
+  when: app_release_deployment_mode == 'container'
+  block:
+    - name: Log in to container registry for artifact check
+      containers.podman.podman_login:
+        registry: "{{ app_release_container_image | regex_replace('/.*$', '') }}"
+        username: "{{ app_release_container_registry_username }}"
+        password: "{{ app_release_container_registry_password }}"
+      no_log: true
+      when:
+        - app_release_container_registry_username | length > 0
+        - app_release_container_registry_password | length > 0
+
+    - name: Search container image tags
+      containers.podman.podman_search:
+        term: "{{ app_release_container_image }}"
+        list_tags: true
+      register: app_release_container_check
+      failed_when: app_release_container_check.images | length == 0
+
+    - name: Confirm container image tag exists
+      ansible.builtin.assert:
+        that:
+          - app_release_container_image_tag in (app_release_container_check.images | map(attribute='Tags') | flatten)
+        fail_msg: >-
+          Tag '{{ app_release_container_image_tag }}' not found for image '{{ app_release_container_image }}'.
+        success_msg: "Found container image tag '{{ app_release_container_image_tag }}'"
 ...
